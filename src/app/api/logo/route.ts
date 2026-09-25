@@ -18,7 +18,7 @@ function pngFromDataUrl(dataUrl: unknown): Buffer | null {
 }
 
 export async function POST(request: Request) {
-  const denied = await requireAdmin();
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   let body: unknown;
   try {
@@ -40,8 +40,8 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE() {
-  const denied = await requireAdmin();
+export async function DELETE(request: Request) {
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   try {
     await unlink(LOGO_FILE);

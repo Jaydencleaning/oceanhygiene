@@ -36,17 +36,21 @@ function asContacts(value: unknown): ContactMessage[] {
   return Array.isArray(value) ? (value as ContactMessage[]) : [];
 }
 
+let memory: CmsState | null = null;
+
 export async function readCms(): Promise<CmsState> {
+  if (memory) return memory;
   const cms = await readJson(CMS_FILE);
   const inbox = await readJson(INBOX_FILE);
   const cmsObj = cms && typeof cms === "object" ? (cms as Record<string, unknown>) : {};
   const inboxObj = inbox && typeof inbox === "object" ? (inbox as Record<string, unknown>) : {};
-  return {
+  memory = {
     content: normalizeSiteContent(cmsObj.content),
     logoHeight: clampLogoHeight(Number(cmsObj.logoHeight ?? DEFAULT_LOGO_HEIGHT)),
     quotes: asQuotes(inboxObj.quotes),
     contacts: asContacts(inboxObj.contacts),
   };
+  return memory;
 }
 
 async function writeJson(file: string, value: unknown) {
@@ -55,13 +59,19 @@ async function writeJson(file: string, value: unknown) {
 }
 
 export async function writeCms(next: CmsState) {
-  await writeJson(CMS_FILE, {
+  memory = {
     content: next.content,
     logoHeight: clampLogoHeight(next.logoHeight),
-  });
-  await writeJson(INBOX_FILE, {
     quotes: next.quotes,
     contacts: next.contacts,
+  };
+  await writeJson(CMS_FILE, {
+    content: memory.content,
+    logoHeight: memory.logoHeight,
   });
-  return next;
+  await writeJson(INBOX_FILE, {
+    quotes: memory.quotes,
+    contacts: memory.contacts,
+  });
+  return memory;
 }

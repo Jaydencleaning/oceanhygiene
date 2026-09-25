@@ -41,10 +41,15 @@ export default function AdminPage() {
     setPassword("");
   }
 
-  function save() {
-    updateContent(draft);
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2500);
+  async function save() {
+    try {
+      setError("");
+      await updateContent(draft);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError("Opslaan is niet gelukt. Log opnieuw in en probeer het nog eens.");
+    }
   }
 
   if (!hydrated) {
@@ -121,6 +126,9 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {error ? (
+          <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        ) : null}
         {saved ? (
           <p className="mt-4 rounded-2xl bg-mint-300/50 px-4 py-3 text-sm text-ocean-900">
             Wijzigingen opgeslagen. Ze zijn zichtbaar op alle apparaten die deze website openen.

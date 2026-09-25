@@ -1,3 +1,5 @@
+import { cmsHeaders } from "./admin-client";
+
 export const PUBLIC_LOGO_SRC = "/logo.png";
 
 export function compressLogoDataUrl(dataUrl: string): Promise<string> {
@@ -29,13 +31,17 @@ export function compressLogoDataUrl(dataUrl: string): Promise<string> {
 
 export function persistPublicLogo(dataUrl: string) {
   if (!dataUrl) {
-    void fetch("/api/logo", { method: "DELETE", credentials: "include" });
+    void fetch("/api/logo", {
+      method: "DELETE",
+      credentials: "include",
+      headers: cmsHeaders(false),
+    });
     return;
   }
   void fetch("/api/logo", {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: cmsHeaders(),
     body: JSON.stringify({ dataUrl }),
   });
 }

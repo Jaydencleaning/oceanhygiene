@@ -4,10 +4,11 @@ import { clampLogoHeight, normalizeSiteContent } from "@/lib/content";
 import { readCms, writeCms } from "@/lib/cms-store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const state = await readCms();
-  const admin = await isAdminRequest();
+  const admin = await isAdminRequest(request);
   return NextResponse.json({
     content: state.content,
     logoHeight: state.logoHeight,
@@ -18,7 +19,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const denied = await requireAdmin();
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   let body: unknown;
   try {

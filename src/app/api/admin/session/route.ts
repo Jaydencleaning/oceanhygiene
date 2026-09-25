@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, adminToken } from "@/lib/admin-session";
+import { ADMIN_COOKIE, adminToken, isAdminRequest } from "@/lib/admin-session";
 import { ADMIN_PASSWORD } from "@/lib/content";
-import { cookies } from "next/headers";
 
-export async function GET() {
-  const store = await cookies();
-  const ok = store.get(ADMIN_COOKIE)?.value === adminToken();
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: 60 * 60 * 24 * 30,
+};
+
+export async function GET(request: Request) {
+  const ok = await isAdminRequest(request);
   return NextResponse.json({ ok });
 }
 
@@ -21,18 +26,13 @@ export async function POST(request: Request) {
   if (password !== ADMIN_PASSWORD) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const store = await cookies();
-  store.set(ADMIN_COOKIE, adminToken(), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-  return NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(ADMIN_COOKIE, adminToken(), cookieOptions);
+  return response;
 }
 
 export async function DELETE() {
-  const store = await cookies();
-  store.delete(ADMIN_COOKIE);
-  return NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(ADMIN_COOKIE, "", { ...cookieOptions, maxAge: 0 });
+  return response;
 }
