@@ -33,6 +33,7 @@ import {
   type QuoteRequest,
   type SiteContent,
 } from "./content";
+import { compressLogoDataUrl, persistPublicLogo } from "./logo-image";
 
 type SiteContextValue = {
   content: SiteContent;
@@ -75,6 +76,22 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     setContacts(loadContacts());
     setAuthenticated(isAdminAuthenticated());
     setHydrated(true);
+    if (stored.dataUrl) {
+      void (async () => {
+        try {
+          const png = stored.dataUrl.startsWith("data:image/png")
+            ? stored.dataUrl
+            : await compressLogoDataUrl(stored.dataUrl);
+          persistPublicLogo(png);
+          if (png !== stored.dataUrl) {
+            setLogo(png);
+            saveLogo({ dataUrl: png, height: stored.height });
+          }
+        } catch {
+          persistPublicLogo(stored.dataUrl);
+        }
+      })();
+    }
 
     const refreshLogo = () => {
       const next = loadLogo();
@@ -108,8 +125,13 @@ export function SiteProvider({ children }: { children: ReactNode }) {
 
   const updateLogo = useCallback((dataUrl: string) => {
     setLogo(dataUrl);
+    persistPublicLogo(dataUrl);
     setLogoHeight((height) => {
-      saveLogo({ dataUrl, height });
+      try {
+        saveLogo({ dataUrl, height });
+      } catch {
+        // Quota: the public file still holds the logo for the site.
+      }
       return height;
     });
   }, []);
@@ -118,15 +140,24 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     const nextHeight = clampLogoHeight(height);
     setLogoHeight(nextHeight);
     setLogo((dataUrl) => {
-      saveLogo({ dataUrl, height: nextHeight });
+      try {
+        saveLogo({ dataUrl, height: nextHeight });
+      } catch {
+        // Keep the in-memory logo if localStorage is full.
+      }
       return dataUrl;
     });
   }, []);
 
   const clearLogo = useCallback(() => {
     setLogo("");
+    persistPublicLogo("");
     setLogoHeight((height) => {
-      saveLogo({ dataUrl: "", height });
+      try {
+        saveLogo({ dataUrl: "", height });
+      } catch {
+        // ignore storage errors on clear
+      }
       return height;
     });
   }, []);

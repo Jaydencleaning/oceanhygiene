@@ -9,6 +9,7 @@ import {
   defaultContent,
   type SiteContent,
 } from "@/lib/content";
+import { compressLogoDataUrl } from "@/lib/logo-image";
 
 export default function AdminPage() {
   const {
@@ -128,8 +129,9 @@ export default function AdminPage() {
         <section className="mt-8 rounded-3xl border border-ocean-800/10 bg-white p-6">
           <h2 className="text-lg font-semibold text-ocean-950">Bedrijfslogo</h2>
           <p className="mt-1 text-sm text-ocean-800/70">
-            Upload een logo. Het wordt als afbeelding in de header en footer
-            getoond. Zonder logo verschijnt de tekst OCEAN.
+            Upload een logo. Het wordt in de header en footer getoond én als
+            bestand op de website bewaard, zodat bezoekers het ook zien. Zonder
+            logo verschijnt de tekst OCEAN.
           </p>
           <LogoUpload />
         </section>
@@ -421,12 +423,15 @@ function LogoUpload() {
         setError("Het bestand kon niet worden gelezen.");
         return;
       }
-      try {
-        updateLogo(result);
-        setError("");
-      } catch {
-        setError("Het logo is te groot voor opslag in de browser. Kies een kleiner bestand.");
-      }
+      void (async () => {
+        try {
+          const png = await compressLogoDataUrl(result);
+          updateLogo(png);
+          setError("");
+        } catch {
+          setError("Het logo kon niet worden verwerkt. Kies een PNG, JPG of SVG.");
+        }
+      })();
     };
     reader.onerror = () => setError("Het bestand kon niet worden gelezen.");
     reader.readAsDataURL(file);
