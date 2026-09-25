@@ -1,5 +1,8 @@
 import { unlink, writeFile } from "fs/promises";
 import path from "path";
+import { requireAdmin } from "@/lib/admin-session";
+
+export const runtime = "nodejs";
 
 const LOGO_FILE = path.join(process.cwd(), "public", "logo.png");
 const MAX_BYTES = 1_500_000;
@@ -15,6 +18,8 @@ function pngFromDataUrl(dataUrl: unknown): Buffer | null {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();
@@ -36,6 +41,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     await unlink(LOGO_FILE);
   } catch {

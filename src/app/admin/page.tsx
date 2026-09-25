@@ -34,9 +34,9 @@ export default function AdminPage() {
     setDraft(content);
   }, [content]);
 
-  function onLogin(event: FormEvent) {
+  async function onLogin(event: FormEvent) {
     event.preventDefault();
-    const ok = login(password);
+    const ok = await login(password);
     setError(ok ? "" : "Onjuist wachtwoord.");
     setPassword("");
   }
@@ -68,6 +68,7 @@ export default function AdminPage() {
           <h1 className="mt-2 text-2xl font-semibold text-ocean-950">OCEAN admin</h1>
           <p className="mt-2 text-sm text-ocean-800/70">
             Voer het wachtwoord in om teksten, contactgegevens en offertes te beheren.
+            Wijzigingen gelden voor alle bezoekers van deze website, op elk apparaat.
           </p>
           <label className="mt-6 block text-sm font-medium text-ocean-900">
             Wachtwoord
@@ -122,7 +123,7 @@ export default function AdminPage() {
 
         {saved ? (
           <p className="mt-4 rounded-2xl bg-mint-300/50 px-4 py-3 text-sm text-ocean-900">
-            Wijzigingen opgeslagen. Ze zijn direct zichtbaar op de website.
+            Wijzigingen opgeslagen. Ze zijn zichtbaar op alle apparaten die deze website openen.
           </p>
         ) : null}
 

@@ -29,11 +29,12 @@ export function compressLogoDataUrl(dataUrl: string): Promise<string> {
 
 export function persistPublicLogo(dataUrl: string) {
   if (!dataUrl) {
-    void fetch("/api/logo", { method: "DELETE" });
+    void fetch("/api/logo", { method: "DELETE", credentials: "include" });
     return;
   }
   void fetch("/api/logo", {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataUrl }),
   });

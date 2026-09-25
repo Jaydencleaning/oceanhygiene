@@ -10,30 +10,21 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ADMIN_PASSWORD,
-  AUTH_KEY,
-  CONTACTS_KEY,
-  CONTENT_KEY,
   DEFAULT_LOGO_HEIGHT,
-  LOGO_KEY,
-  QUOTES_KEY,
   clampLogoHeight,
   defaultContent,
-  isAdminAuthenticated,
-  loadContacts,
   loadContent,
-  loadLogo,
+  loadContacts,
   loadQuotes,
   saveContacts,
   saveContent,
-  saveLogo,
   saveQuotes,
   setAdminAuthenticated,
   type ContactMessage,
   type QuoteRequest,
   type SiteContent,
 } from "./content";
-import { compressLogoDataUrl, persistPublicLogo } from "./logo-image";
+import { persistPublicLogo } from "./logo-image";
 
 type SiteContextValue = {
   content: SiteContent;
@@ -52,11 +43,38 @@ type SiteContextValue = {
   deleteQuote: (id: string) => void;
   addContact: (message: Omit<ContactMessage, "id" | "createdAt">) => void;
   deleteContact: (id: string) => void;
-  login: (password: string) => boolean;
+  login: (password: string) => Promise<boolean>;
   logout: () => void;
 };
 
+type CmsPayload = {
+  content?: SiteContent;
+  logoHeight?: number;
+  quotes?: QuoteRequest[];
+  contacts?: ContactMessage[];
+  authenticated?: boolean;
+};
+
 const SiteContext = createContext<SiteContextValue | null>(null);
+
+async function fetchCms(): Promise<CmsPayload | null> {
+  try {
+    const res = await fetch("/api/cms", { credentials: "include", cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as CmsPayload;
+  } catch {
+    return null;
+  }
+}
+
+function putCms(body: { content?: SiteContent; logoHeight?: number }) {
+  void fetch("/api/cms", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
 
 export function SiteProvider({ children }: { children: ReactNode }) {
   const [content, setContent] = useState<SiteContent>(defaultContent);
@@ -67,110 +85,110 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
 
-  useEffect(() => {
-    setContent(loadContent());
-    const stored = loadLogo();
-    setLogo(stored.dataUrl);
-    setLogoHeight(stored.height);
-    setQuotes(loadQuotes());
-    setContacts(loadContacts());
-    setAuthenticated(isAdminAuthenticated());
-    setHydrated(true);
-    if (stored.dataUrl) {
-      void (async () => {
-        try {
-          const png = stored.dataUrl.startsWith("data:image/png")
-            ? stored.dataUrl
-            : await compressLogoDataUrl(stored.dataUrl);
-          persistPublicLogo(png);
-          if (png !== stored.dataUrl) {
-            setLogo(png);
-            saveLogo({ dataUrl: png, height: stored.height });
-          }
-        } catch {
-          persistPublicLogo(stored.dataUrl);
-        }
-      })();
+  const applyCms = useCallback((payload: CmsPayload) => {
+    if (payload.content) {
+      setContent(payload.content);
+      saveContent(payload.content);
     }
-
-    const refreshLogo = () => {
-      const next = loadLogo();
-      setLogo(next.dataUrl);
-      setLogoHeight(next.height);
-    };
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === CONTENT_KEY) setContent(loadContent());
-      if (event.key === null || event.key === LOGO_KEY) refreshLogo();
-      if (event.key === null || event.key === QUOTES_KEY) setQuotes(loadQuotes());
-      if (event.key === null || event.key === CONTACTS_KEY) setContacts(loadContacts());
-      if (event.key === null || event.key === AUTH_KEY) setAuthenticated(isAdminAuthenticated());
-    };
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("ocean-logo-change", refreshLogo);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("ocean-logo-change", refreshLogo);
-    };
+    if (typeof payload.logoHeight === "number") {
+      setLogoHeight(clampLogoHeight(payload.logoHeight));
+    }
+    if (payload.quotes) {
+      setQuotes(payload.quotes);
+      saveQuotes(payload.quotes);
+    }
+    if (payload.contacts) {
+      setContacts(payload.contacts);
+      saveContacts(payload.contacts);
+    }
+    if (typeof payload.authenticated === "boolean") {
+      setAuthenticated(payload.authenticated);
+      setAdminAuthenticated(payload.authenticated);
+    }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const remote = await fetchCms();
+      if (cancelled) return;
+      if (remote?.content) {
+        applyCms(remote);
+      } else {
+        setContent(loadContent());
+        setQuotes(loadQuotes());
+        setContacts(loadContacts());
+      }
+      setHydrated(true);
+    })();
+
+    const onFocus = () => {
+      void fetchCms().then((remote) => {
+        if (!remote?.content) return;
+        if (window.location.pathname.startsWith("/admin")) {
+          applyCms({
+            quotes: remote.quotes,
+            contacts: remote.contacts,
+            authenticated: remote.authenticated,
+          });
+          return;
+        }
+        applyCms(remote);
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [applyCms]);
 
   const updateContent = useCallback((next: SiteContent) => {
     setContent(next);
     saveContent(next);
+    putCms({ content: next });
   }, []);
 
   const resetContent = useCallback(() => {
     setContent(defaultContent);
     saveContent(defaultContent);
+    putCms({ content: defaultContent });
   }, []);
 
   const updateLogo = useCallback((dataUrl: string) => {
     setLogo(dataUrl);
     persistPublicLogo(dataUrl);
-    setLogoHeight((height) => {
-      try {
-        saveLogo({ dataUrl, height });
-      } catch {
-        // Quota: the public file still holds the logo for the site.
-      }
-      return height;
-    });
   }, []);
 
   const updateLogoHeight = useCallback((height: number) => {
     const nextHeight = clampLogoHeight(height);
     setLogoHeight(nextHeight);
-    setLogo((dataUrl) => {
-      try {
-        saveLogo({ dataUrl, height: nextHeight });
-      } catch {
-        // Keep the in-memory logo if localStorage is full.
-      }
-      return dataUrl;
-    });
+    putCms({ logoHeight: nextHeight });
   }, []);
 
   const clearLogo = useCallback(() => {
     setLogo("");
     persistPublicLogo("");
-    setLogoHeight((height) => {
-      try {
-        saveLogo({ dataUrl: "", height });
-      } catch {
-        // ignore storage errors on clear
-      }
-      return height;
-    });
   }, []);
 
   const addQuote = useCallback((quote: Omit<QuoteRequest, "id" | "createdAt">) => {
-    setQuotes((prev) => {
-      const next = [
-        { ...quote, id: crypto.randomUUID(), createdAt: new Date().toISOString() },
-        ...prev,
-      ];
-      saveQuotes(next);
-      return next;
-    });
+    void (async () => {
+      const res = await fetch("/api/cms/quotes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(quote),
+      });
+      if (!res.ok) return;
+      const created = (await res.json()) as QuoteRequest;
+      setQuotes((prev) => {
+        const next = [created, ...prev.filter((item) => item.id !== created.id)];
+        saveQuotes(next);
+        return next;
+      });
+    })();
   }, []);
 
   const deleteQuote = useCallback((id: string) => {
@@ -179,17 +197,28 @@ export function SiteProvider({ children }: { children: ReactNode }) {
       saveQuotes(next);
       return next;
     });
+    void fetch(`/api/cms/quotes?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
   }, []);
 
   const addContact = useCallback((message: Omit<ContactMessage, "id" | "createdAt">) => {
-    setContacts((prev) => {
-      const next = [
-        { ...message, id: crypto.randomUUID(), createdAt: new Date().toISOString() },
-        ...prev,
-      ];
-      saveContacts(next);
-      return next;
-    });
+    void (async () => {
+      const res = await fetch("/api/cms/contacts", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      if (!res.ok) return;
+      const created = (await res.json()) as ContactMessage;
+      setContacts((prev) => {
+        const next = [created, ...prev.filter((item) => item.id !== created.id)];
+        saveContacts(next);
+        return next;
+      });
+    })();
   }, []);
 
   const deleteContact = useCallback((id: string) => {
@@ -198,20 +227,43 @@ export function SiteProvider({ children }: { children: ReactNode }) {
       saveContacts(next);
       return next;
     });
+    void fetch(`/api/cms/contacts?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
   }, []);
 
-  const login = useCallback((password: string) => {
-    const ok = password === ADMIN_PASSWORD;
-    if (ok) {
-      setAdminAuthenticated(true);
-      setAuthenticated(true);
+  const login = useCallback(async (password: string) => {
+    const res = await fetch("/api/admin/session", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) return false;
+    setAuthenticated(true);
+    setAdminAuthenticated(true);
+    const local = loadContent();
+    const remote = await fetchCms();
+    const remoteIsDefault =
+      JSON.stringify(remote?.content ?? defaultContent) === JSON.stringify(defaultContent);
+    const localIsCustom = JSON.stringify(local) !== JSON.stringify(defaultContent);
+    if (remoteIsDefault && localIsCustom) {
+      putCms({ content: local, logoHeight });
+      setContent(local);
+      saveContent(local);
+    } else if (remote?.content) {
+      applyCms(remote);
     }
-    return ok;
-  }, []);
+    const inbox = await fetchCms();
+    if (inbox) applyCms(inbox);
+    return true;
+  }, [applyCms, logoHeight]);
 
   const logout = useCallback(() => {
-    setAdminAuthenticated(false);
     setAuthenticated(false);
+    setAdminAuthenticated(false);
+    void fetch("/api/admin/session", { method: "DELETE", credentials: "include" });
   }, []);
 
   const value = useMemo(

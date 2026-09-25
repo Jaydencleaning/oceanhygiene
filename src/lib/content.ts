@@ -156,7 +156,7 @@ export const defaultContent: SiteContent = {
     "Wij komen langs, nemen sanitaire ruimtes, volumes en looproutes op, en sturen een offerte met tarieven, leveringsritme en bruikleen van dispensers. Geen vrijblijvende brochure, een werkbaar voorstel.",
 };
 
-function isObject(value: unknown): value is Record<string, unknown> {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -185,6 +185,11 @@ function scrubCompetitorNames<T>(value: T): T {
     return next as T;
   }
   return value;
+}
+
+export function normalizeSiteContent(value: unknown): SiteContent {
+  if (!isObject(value)) return defaultContent;
+  return scrubCompetitorNames(mergeContent(defaultContent, value as Partial<SiteContent>));
 }
 
 export function loadContent(): SiteContent {
